@@ -11,6 +11,7 @@ use crate::{
     library::{Library, LibraryEntry},
     requests::CDN_URL,
     stats::EXISTING_SOUND_FILES,
+    util::stringify_duration,
 };
 
 pub type VersionType = usize;
@@ -191,8 +192,44 @@ fn favourites_list(ui: &mut Ui, gdsfx: &mut GdSfx, sfx_library: LibraryEntry) {
 }
 
 fn stats_list(ui: &mut Ui, gdsfx: &mut GdSfx) {
+    // (bytes, duration, files)
+    fn recursive(entry: &LibraryEntry) -> (u128, u128, i64) {
+        match entry {
+            LibraryEntry::Category { children, .. } => children
+                .into_iter()
+                .map(|child| recursive(child))
+                .reduce(|a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2))
+                .unwrap_or((0, 0, 1)),
+            LibraryEntry::Sound {
+                bytes, duration, ..
+            } => (*bytes as u128, *duration as u128, 1),
+        }
+    }
+    let (total_bytes, total_duration, total_files) =
+        recursive(&gdsfx.sfx_library.as_ref().unwrap().sound_effects);
+
+    ui.heading("SFX Library");
+
+    ui.add_space(10.0);
+
+    ui.label(format!("Total files: {}", total_files));
     ui.label(format!(
-        "{} sfx files on your local machine",
+        "Total size: {}",
+        pretty_bytes::converter::convert(total_bytes as f64)
+    ));
+    ui.label(format!(
+        "Total duration: {}s",
+        stringify_duration(total_duration as i64)
+    ));
+
+    ui.add_space(30.0);
+
+    ui.heading("SFX Files");
+
+    ui.add_space(10.0);
+
+    ui.label(format!(
+        "Downloaded sfx files: {}",
         EXISTING_SOUND_FILES.lock().unwrap().len()
     ));
 }
@@ -292,11 +329,7 @@ fn side_bar_sfx(ctx: &egui::Context, sfx: Option<&LibraryEntry>) {
             ui.heading(format!("ID: {}", sfx.id()));
             ui.heading(format!("Category ID: {}", sfx.parent()));
             ui.heading(format!("Size: {}", convert(sfx.bytes() as f64)));
-            ui.heading(format!("Duration: {}s", {
-                let mut centiseconds = format!("{:>03}", sfx.duration());
-                centiseconds.insert(centiseconds.len() - 2, '.');
-                centiseconds
-            }));
+            ui.heading(format!("Duration: {}s", stringify_duration(sfx.duration())));
 
             ui.add_space(50.0);
 
