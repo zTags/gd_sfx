@@ -7,6 +7,7 @@ use crate::{
     encoding::full_decode,
     favourites::{has_favourite, FAVOURITES_CHARACTER},
     requests::{download_sfx, CDN_URL},
+    stats::{add_file_to_stats, remove_file_from_stats},
     util::{GD_FOLDER, LOCAL_SFX_LIBRARY},
 };
 
@@ -218,10 +219,12 @@ impl LibraryEntry {
     pub fn download_and_store(&self) {
         if let Some(content) = self.download(CDN_URL) {
             fs::write(self.path(), content).unwrap();
+            add_file_to_stats(self.id());
         }
     }
     pub fn delete(&self) {
         let _ = fs::remove_file(self.path());
+        remove_file_from_stats(self.id());
     }
     pub fn exists(&self) -> bool {
         self.path().exists()
