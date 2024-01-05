@@ -100,11 +100,12 @@ fn main_scroll_area(ctx: &egui::Context, gdsfx: &mut GdSfx) {
                 match gdsfx.stage {
                     Stage::Library => {
                         let library = gdsfx.sfx_library.clone().unwrap().sound_effects;
-                        let sfx =
-                            &mut filter_sounds(&library, &gdsfx.search_query.to_ascii_lowercase())
-                                [0];
-                        remove_empty_category_nodes(sfx);
-                        library_list(ui, gdsfx, sfx);
+                        let mut sfx =
+                            filter_sounds(&library, &gdsfx.search_query.to_ascii_lowercase());
+                        if !sfx.is_empty() {
+                            remove_empty_category_nodes(&mut sfx[0]);
+                            library_list(ui, gdsfx, &sfx[0]);
+                        }
                     }
                     Stage::Favourites => {
                         favourites_list(ui, gdsfx, sfx_library.sound_effects.clone())
@@ -360,7 +361,9 @@ fn side_bar_sfx(ctx: &egui::Context, sfx: Option<&LibraryEntry>) {
 fn remove_empty_category_nodes(node: &mut LibraryEntry) {
     match node {
         LibraryEntry::Sound { .. } => {}
-        LibraryEntry::Category { children, .. } => {
+        LibraryEntry::Category {
+            children, parent, ..
+        } => {
             // Recursively remove empty Category nodes from children
             children.retain(|child| {
                 if let LibraryEntry::Category { children, .. } = child {
@@ -368,6 +371,7 @@ fn remove_empty_category_nodes(node: &mut LibraryEntry) {
                         || children
                             .iter()
                             .any(|c| matches!(c, LibraryEntry::Sound { .. }))
+                        || *parent == 1
                 } else {
                     true
                 }
