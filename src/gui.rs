@@ -96,7 +96,9 @@ fn main_scroll_area(ctx: &egui::Context, gdsfx: &mut GdSfx) {
                 match gdsfx.stage {
                     Stage::Library => {
                         let library = gdsfx.sfx_library.clone().unwrap().sound_effects;
-                        let sfx = &mut filter_sounds(&library, &gdsfx.search_query)[0];
+                        let sfx =
+                            &mut filter_sounds(&library, &gdsfx.search_query.to_ascii_lowercase())
+                                [0];
                         remove_empty_category_nodes(sfx);
                         library_list(ui, gdsfx, sfx);
                     }
@@ -115,9 +117,7 @@ fn library_list(ui: &mut Ui, gdsfx: &mut GdSfx, sfx_library: &LibraryEntry) {
         match entry {
             LibraryEntry::Category { children, .. } => {
                 let (mut sounds, mut categories): (Vec<_>, Vec<_>) =
-                    children.iter().partition(|x| x.is_category());
-                dbg!(sounds.len());
-                dbg!(categories.len());
+                    children.iter().partition(|x| !x.is_category());
 
                 let sorting = |a: &&LibraryEntry, b: &&LibraryEntry| {
                     match gdsfx.sorting {
@@ -339,7 +339,7 @@ fn remove_empty_category_nodes(node: &mut LibraryEntry) {
 fn filter_sounds(tree: &LibraryEntry, filter_str: &str) -> Vec<LibraryEntry> {
     match tree {
         LibraryEntry::Sound { name, .. } => {
-            if name.contains(filter_str) {
+            if name.to_ascii_lowercase().contains(filter_str) {
                 vec![tree.clone()] // Keep the sound if it contains the filter string
             } else {
                 vec![] // Filter out the sound if it doesn't contain the filter string
