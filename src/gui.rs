@@ -250,6 +250,7 @@ fn credits_list(ui: &mut Ui, gdsfx: &mut GdSfx) {
     for (name, link) in [
         ("Specky", "https://github.com/SpeckyYT"),
         ("tags", "https://github.com/zTags"),
+        ("kr8gz", "https://github.com/kr8gz"),
     ] {
         ui.hyperlink_to(name, link);
     }
