@@ -1,9 +1,14 @@
 use std::{fs, path::PathBuf};
 
 use eframe::epaint::ahash::{HashMap, HashMapExt};
-use slab_tree::{TreeBuilder, NodeId, NodeRef};
+use slab_tree::{NodeId, NodeRef, TreeBuilder};
 
-use crate::{encoding::full_decode, util::{GD_FOLDER, LOCAL_SFX_LIBRARY}, requests::{download_sfx, CDN_URL}, favourites::{has_favourite, FAVOURITES_CHARACTER}};
+use crate::{
+    encoding::full_decode,
+    favourites::{has_favourite, FAVOURITES_CHARACTER},
+    requests::{download_sfx, CDN_URL},
+    util::{GD_FOLDER, LOCAL_SFX_LIBRARY},
+};
 
 #[derive(Debug, Clone)]
 pub struct Library {
@@ -13,13 +18,15 @@ pub struct Library {
 
 #[derive(Debug, Clone)]
 pub enum LibraryEntry {
-    Category { // 3544,Aquatic Sounds,1,1,0,0;
+    Category {
+        // 3544,Aquatic Sounds,1,1,0,0;
         id: i64,
         name: String,
         parent: i64,
         children: Vec<LibraryEntry>,
     },
-    Sound { // 10728,Background Ambience Loop 01,0,10642,96677,699;
+    Sound {
+        // 10728,Background Ambience Loop 01,0,10642,96677,699;
         id: i64,
         name: String,
         parent: i64,
@@ -110,38 +117,48 @@ impl LibraryEntry {
         )
     }
     pub fn parse_string(string: &str) -> Self {
-        let mut entries: Vec<LibraryEntry> = string.split(';').filter_map(|line| {
-            let segments = line.split(',').collect::<Vec<&str>>();
+        let mut entries: Vec<LibraryEntry> = string
+            .split(';')
+            .filter_map(|line| {
+                let segments = line.split(',').collect::<Vec<&str>>();
 
-            if segments.len() != 6 { return None }
+                if segments.len() != 6 {
+                    return None;
+                }
 
-            match segments[2] {
-                "0" => Some(LibraryEntry::Sound {
-                    id: segments[0].parse().unwrap(),
-                    name: segments[1].to_string(),
-                    parent: segments[3].parse().unwrap(),
-                    bytes: segments[4].parse().unwrap(),
-                    duration: segments[5].parse().unwrap(),
-                }),
-                "1" => Some(LibraryEntry::Category {
-                    id: segments[0].parse().unwrap(),
-                    name: segments[1].to_string(),
-                    parent: segments[3].parse().unwrap(),
-                    children: vec![],
-                }),
-                _ => None
-            }
-        })
-        .collect::<Vec<_>>();
+                match segments[2] {
+                    "0" => Some(LibraryEntry::Sound {
+                        id: segments[0].parse().unwrap(),
+                        name: segments[1].to_string(),
+                        parent: segments[3].parse().unwrap(),
+                        bytes: segments[4].parse().unwrap(),
+                        duration: segments[5].parse().unwrap(),
+                    }),
+                    "1" => Some(LibraryEntry::Category {
+                        id: segments[0].parse().unwrap(),
+                        name: segments[1].to_string(),
+                        parent: segments[3].parse().unwrap(),
+                        children: vec![],
+                    }),
+                    _ => None,
+                }
+            })
+            .collect::<Vec<_>>();
 
-        let mut library_map: HashMap<i64, (&mut LibraryEntry, NodeId)> = HashMap::with_capacity(entries.len());
-        let mut library_tree = TreeBuilder::new().with_capacity(entries.len()).with_root(entries[0].id()).build();
+        let mut library_map: HashMap<i64, (&mut LibraryEntry, NodeId)> =
+            HashMap::with_capacity(entries.len());
+        let mut library_tree = TreeBuilder::new()
+            .with_capacity(entries.len())
+            .with_root(entries[0].id())
+            .build();
 
         let root_id = entries[0].id();
 
         for entry in &mut entries {
             if entry.id() != root_id {
-                let mut parent_id = library_tree.get_mut((library_map.get(&entry.parent()).unwrap()).1).unwrap();
+                let mut parent_id = library_tree
+                    .get_mut((library_map.get(&entry.parent()).unwrap()).1)
+                    .unwrap();
                 let entry_id: slab_tree::NodeMut<'_, i64> = parent_id.append(entry.id());
                 library_map.insert(entry.id(), (entry, entry_id.node_id()));
             } else {
@@ -173,24 +190,25 @@ impl LibraryEntry {
         GD_FOLDER.join(self.filename())
     }
     pub fn download(&self, cdn_url: &str) -> Option<Vec<u8>> {
-        if self.is_category() { return None }
+        if self.is_category() {
+            return None;
+        }
 
         let path = self.path();
 
         let mut cache_data = true;
 
-        let data =
-            if let Some(data) = LOCAL_SFX_LIBRARY.lock().get(&self.id()) {
-                cache_data = false;
-                data.clone()
-            } else if path.exists() {
-                fs::read(path).unwrap()
-            } else if let Some(data) = download_sfx(cdn_url, self) {
-                data
-            } else {
-                return None
-            };
-        
+        let data = if let Some(data) = LOCAL_SFX_LIBRARY.lock().get(&self.id()) {
+            cache_data = false;
+            data.clone()
+        } else if path.exists() {
+            fs::read(path).unwrap()
+        } else if let Some(data) = download_sfx(cdn_url, self) {
+            data
+        } else {
+            return None;
+        };
+
         if cache_data {
             LOCAL_SFX_LIBRARY.lock().insert(self.id(), data.clone());
         }
@@ -215,25 +233,26 @@ impl LibraryEntry {
 
 impl Credit {
     pub fn parse_string(string: &str) -> Vec<Self> {
-        string.split(';')
-        .filter_map(|c| {
-            let data = c.split(',').collect::<Vec<&str>>();
-            if data.len() == 2 {
-                Some(Credit {
-                    name: data[0].to_string(),
-                    link: data[1].to_string(),
-                })
-            } else {
-                None
-            }
-        })
-        .collect()
+        string
+            .split(';')
+            .filter_map(|c| {
+                let data = c.split(',').collect::<Vec<&str>>();
+                if data.len() == 2 {
+                    Some(Credit {
+                        name: data[0].to_string(),
+                        link: data[1].to_string(),
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 
 impl Library {
     pub fn parse_string(string: &str) -> Self {
-        let (sound_effects, credits) = string.split_once("|").unwrap_or((string, ""));
+        let (sound_effects, credits) = string.split_once('|').unwrap_or((string, ""));
 
         Library {
             sound_effects: LibraryEntry::parse_string(sound_effects),

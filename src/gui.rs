@@ -7,7 +7,7 @@ use pretty_bytes::converter::convert;
 use crate::{
     audio::{play_sound, stop_audio},
     favourites::{add_favourite, has_favourite, remove_favourite},
-    library::{LibraryEntry, Library},
+    library::{Library, LibraryEntry},
     requests::CDN_URL,
 };
 
@@ -37,14 +37,14 @@ pub enum Stage {
 pub enum Sorting {
     #[default]
     Default,
-    NameInc,    // a - z
-    NameDec,    // z - a
-    LengthInc,  // 0.00 - 1.00
-    LengthDec,  // 1.00 - 0.00
-    IdInc,      // 9 - 0
-    IdDec,      // 0 - 9
-    SizeInc,    // 0kb - 9kb
-    SizeDec,    // 9kb - 0kb
+    NameInc,   // a - z
+    NameDec,   // z - a
+    LengthInc, // 0.00 - 1.00
+    LengthDec, // 1.00 - 0.00
+    IdInc,     // 9 - 0
+    IdDec,     // 0 - 9
+    SizeInc,   // 0kb - 9kb
+    SizeDec,   // 9kb - 0kb
 }
 
 impl eframe::App for GdSfx {
@@ -95,7 +95,9 @@ fn main_scroll_area(ctx: &egui::Context, gdsfx: &mut GdSfx) {
             if let Some(sfx_library) = gdsfx.sfx_library.as_ref() {
                 match gdsfx.stage {
                     Stage::Library => library_list(ui, gdsfx, sfx_library.sound_effects.clone()),
-                    Stage::Favourites => favourites_list(ui, gdsfx, sfx_library.sound_effects.clone()),
+                    Stage::Favourites => {
+                        favourites_list(ui, gdsfx, sfx_library.sound_effects.clone())
+                    }
                     Stage::Credits => credits_list(ui, gdsfx),
                 }
             }
@@ -108,10 +110,9 @@ fn library_list(ui: &mut Ui, gdsfx: &mut GdSfx, sfx_library: LibraryEntry) {
         let q = gdsfx.search_query.to_ascii_lowercase();
         match entry {
             LibraryEntry::Category { children, .. } => {
-                let (mut categories, sounds): (Vec<_>, Vec<_>) = children
-                    .into_iter()
-                    .partition(|a| a.is_category());
-                
+                let (mut categories, sounds): (Vec<_>, Vec<_>) =
+                    children.iter().partition(|a| a.is_category());
+
                 let sorting = |a: &&LibraryEntry, b: &&LibraryEntry| {
                     match gdsfx.sorting {
                         Sorting::Default => std::cmp::Ordering::Equal,
@@ -128,37 +129,34 @@ fn library_list(ui: &mut Ui, gdsfx: &mut GdSfx, sfx_library: LibraryEntry) {
 
                 categories.sort_by(sorting);
 
-                if entry.parent() == 0 { // root
+                if entry.parent() == 0 {
+                    // root
                     for child in categories {
                         recursive(gdsfx, child, ui);
                     }
                 } else {
-                    let mut filtered_sounds = sounds.into_iter()
-                    .filter(|sound|
-                        if !q.is_empty() {
+                    let mut filtered_sounds = sounds
+                        .into_iter()
+                        .filter(|sound| {
                             sound.name().to_ascii_lowercase().contains(&q)
                                 || sound.id().to_string().contains(&q)
-                        } else {
-                            true
-                        }
-                    )
-                    .collect::<Vec<_>>();
+                        })
+                        .collect::<Vec<_>>();
 
                     filtered_sounds.sort_by(sorting);
 
-                    let is_disabled = filtered_sounds.is_empty() && !q.is_empty();
-                    ui.set_enabled(!is_disabled);
+                    let is_disabled = filtered_sounds.is_empty() && categories.is_empty(); // an empty query will always match everything
 
-                    ui.collapsing(entry.name(), |ui| {
-                        for child in categories {
-                            recursive(gdsfx, child, ui);
-                        }
-                        for child in filtered_sounds {
-                            recursive(gdsfx, child, ui);
-                        }
+                    ui.add_enabled_ui(!is_disabled, |ui| {
+                        ui.collapsing(entry.name(), |ui| {
+                            for child in categories {
+                                recursive(gdsfx, child, ui);
+                            }
+                            for child in filtered_sounds {
+                                recursive(gdsfx, child, ui);
+                            }
+                        });
                     });
-
-                    ui.set_enabled(true);
                 }
             }
             LibraryEntry::Sound { .. } => {
@@ -178,7 +176,11 @@ fn favourites_list(ui: &mut Ui, gdsfx: &mut GdSfx, sfx_library: LibraryEntry) {
                 }
             }
             LibraryEntry::Sound { name, id, .. } => {
-                if has_favourite(*id) && name.to_ascii_lowercase().contains(&gdsfx.search_query.to_ascii_lowercase()) {
+                if has_favourite(*id)
+                    && name
+                        .to_ascii_lowercase()
+                        .contains(&gdsfx.search_query.to_ascii_lowercase())
+                {
                     sfx_button(ui, gdsfx, entry)
                 }
             }
@@ -199,10 +201,10 @@ fn credits_list(ui: &mut Ui, gdsfx: &mut GdSfx) {
     ui.heading("<This project>");
     ui.hyperlink_to("GitHub", "https://github.com/SpeckyYT/gd_sfx");
     ui.add_space(10.0);
-    
+
     for (name, link) in [
         ("Specky", "https://github.com/SpeckyYT"),
-        ("Tags", "https://github.com/zTags"),
+        ("tags", "https://github.com/zTags"),
     ] {
         ui.hyperlink_to(name, link);
     }
@@ -287,10 +289,16 @@ fn side_bar_sfx(ctx: &egui::Context, sfx: Option<&LibraryEntry>) {
 
             ui.add_space(50.0);
 
-            if ui.add_enabled(!sfx.exists(), Button::new("Download")).clicked() {
+            if ui
+                .add_enabled(!sfx.exists(), Button::new("Download"))
+                .clicked()
+            {
                 sfx.download_and_store();
             }
-            if ui.add_enabled(sfx.exists(), Button::new("Delete")).clicked() {
+            if ui
+                .add_enabled(sfx.exists(), Button::new("Delete"))
+                .clicked()
+            {
                 sfx.delete();
             }
             if ui.button("Play").clicked() {
