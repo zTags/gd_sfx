@@ -196,8 +196,8 @@ fn stats_list(ui: &mut Ui, gdsfx: &mut GdSfx) {
     fn recursive(entry: &LibraryEntry) -> (u128, u128, i64) {
         match entry {
             LibraryEntry::Category { children, .. } => children
-                .into_iter()
-                .map(|child| recursive(child))
+                .iter()
+                .map(recursive)
                 .reduce(|a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2))
                 .unwrap_or((0, 0, 1)),
             LibraryEntry::Sound {
