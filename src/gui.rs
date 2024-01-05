@@ -94,7 +94,12 @@ fn main_scroll_area(ctx: &egui::Context, gdsfx: &mut GdSfx) {
         egui::ScrollArea::vertical().show(ui, |ui| {
             if let Some(sfx_library) = gdsfx.sfx_library.as_ref() {
                 match gdsfx.stage {
-                    Stage::Library => library_list(ui, gdsfx, sfx_library.sound_effects.clone()),
+                    Stage::Library => {
+                        let library = gdsfx.sfx_library.clone().unwrap().sound_effects;
+                        let sfx = &mut filter_sounds(&library, &gdsfx.search_query)[0];
+                        remove_empty_category_nodes(sfx);
+                        library_list(ui, gdsfx, sfx);
+                    }
                     Stage::Favourites => {
                         favourites_list(ui, gdsfx, sfx_library.sound_effects.clone())
                     }
@@ -105,13 +110,14 @@ fn main_scroll_area(ctx: &egui::Context, gdsfx: &mut GdSfx) {
     });
 }
 
-fn library_list(ui: &mut Ui, gdsfx: &mut GdSfx, sfx_library: LibraryEntry) {
+fn library_list(ui: &mut Ui, gdsfx: &mut GdSfx, sfx_library: &LibraryEntry) {
     fn recursive(gdsfx: &mut GdSfx, entry: &LibraryEntry, ui: &mut egui::Ui) {
-        let q = gdsfx.search_query.to_ascii_lowercase();
         match entry {
             LibraryEntry::Category { children, .. } => {
-                let (mut categories, sounds): (Vec<_>, Vec<_>) =
-                    children.iter().partition(|a| a.is_category());
+                let (mut sounds, mut categories): (Vec<_>, Vec<_>) =
+                    children.iter().partition(|x| x.is_category());
+                dbg!(sounds.len());
+                dbg!(categories.len());
 
                 let sorting = |a: &&LibraryEntry, b: &&LibraryEntry| {
                     match gdsfx.sorting {
@@ -128,6 +134,7 @@ fn library_list(ui: &mut Ui, gdsfx: &mut GdSfx, sfx_library: LibraryEntry) {
                 };
 
                 categories.sort_by(sorting);
+                sounds.sort_by(sorting);
 
                 if entry.parent() == 0 {
                     // root
@@ -135,24 +142,14 @@ fn library_list(ui: &mut Ui, gdsfx: &mut GdSfx, sfx_library: LibraryEntry) {
                         recursive(gdsfx, child, ui);
                     }
                 } else {
-                    let mut filtered_sounds = sounds
-                        .into_iter()
-                        .filter(|sound| {
-                            sound.name().to_ascii_lowercase().contains(&q)
-                                || sound.id().to_string().contains(&q)
-                        })
-                        .collect::<Vec<_>>();
-
-                    filtered_sounds.sort_by(sorting);
-
-                    let is_disabled = filtered_sounds.is_empty() && categories.is_empty(); // an empty query will always match everything
+                    let is_disabled = sounds.is_empty() && categories.is_empty(); // an empty query will always match everything
 
                     ui.add_enabled_ui(!is_disabled, |ui| {
                         ui.collapsing(entry.name(), |ui| {
                             for child in categories {
                                 recursive(gdsfx, child, ui);
                             }
-                            for child in filtered_sounds {
+                            for child in sounds {
                                 recursive(gdsfx, child, ui);
                             }
                         });
@@ -164,7 +161,7 @@ fn library_list(ui: &mut Ui, gdsfx: &mut GdSfx, sfx_library: LibraryEntry) {
             }
         }
     }
-    recursive(gdsfx, &sfx_library, ui);
+    recursive(gdsfx, sfx_library, ui);
 }
 
 fn favourites_list(ui: &mut Ui, gdsfx: &mut GdSfx, sfx_library: LibraryEntry) {
@@ -270,6 +267,9 @@ fn sfx_button(ui: &mut Ui, gdsfx: &mut GdSfx, entry: &LibraryEntry) {
 fn side_bar_sfx(ctx: &egui::Context, sfx: Option<&LibraryEntry>) {
     if let Some(sfx) = sfx {
         egui::CentralPanel::default().show(ctx, |ui| {
+            // ui.input(|input| {
+            // if input.modifiers.alt
+            // });
             ui.heading(sfx.name());
 
             ui.add_space(25.0);
@@ -308,5 +308,66 @@ fn side_bar_sfx(ctx: &egui::Context, sfx: Option<&LibraryEntry>) {
                 stop_audio();
             }
         });
+    }
+}
+
+// chatgpt (tm)
+fn remove_empty_category_nodes(node: &mut LibraryEntry) {
+    match node {
+        LibraryEntry::Sound { .. } => {}
+        LibraryEntry::Category { children, .. } => {
+            // Recursively remove empty Category nodes from children
+            children.retain(|child| {
+                if let LibraryEntry::Category { children, .. } = child {
+                    !children.is_empty()
+                        || children
+                            .iter()
+                            .any(|c| matches!(c, LibraryEntry::Sound { .. }))
+                } else {
+                    true
+                }
+            });
+
+            // Recursively apply to children
+            for child in children {
+                remove_empty_category_nodes(child);
+            }
+        }
+    }
+}
+
+fn filter_sounds(tree: &LibraryEntry, filter_str: &str) -> Vec<LibraryEntry> {
+    match tree {
+        LibraryEntry::Sound { name, .. } => {
+            if name.contains(filter_str) {
+                vec![tree.clone()] // Keep the sound if it contains the filter string
+            } else {
+                vec![] // Filter out the sound if it doesn't contain the filter string
+            }
+        }
+        LibraryEntry::Category {
+            id,
+            name,
+            parent,
+            children,
+        } => {
+            // Recursively filter sounds in subcategories
+            let filtered_sounds: Vec<LibraryEntry> = children
+                .iter()
+                .flat_map(|node| filter_sounds(node, filter_str))
+                .collect();
+
+            // Only keep the category if it contains any filtered sounds
+            if !filtered_sounds.is_empty() {
+                vec![LibraryEntry::Category {
+                    name: name.clone(),
+                    parent: *parent,
+                    id: *id,
+                    children: filtered_sounds,
+                }]
+            } else {
+                vec![] // Filter out the category if it doesn't contain any filtered sounds
+            }
+        }
     }
 }
